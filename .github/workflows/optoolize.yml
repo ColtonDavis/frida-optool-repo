@@ -1,0 +1,52 @@
+
+name: optool-inject-frida
+
+on:
+  workflow_dispatch:
+
+jobs:
+  optoolize:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (homebrew + optool)
+        run: |
+          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || true
+          eval "$(/opt/homebrew/bin/brew shellenv)" || true
+          brew install python3 || true
+          brew install optool || true
+          optool --version || true
+
+      - name: List repo files
+        run: ls -la
+
+      - name: Prepare workdir
+        run: |
+          mkdir workdir
+          unzip -o crssplay_frida_localpatched.ipa -d workdir
+
+      - name: Inject LC_LOAD_DYLIB into dfxm
+        run: |
+          set -e
+          # find the app folder (assumes only one .app in Payload)
+          APP_PATH=$(ls workdir/Payload | grep '\.app' | head -n1)
+          echo "App path: $APP_PATH"
+          # run optool install
+          optool install -c load -p @executable_path/Frameworks/frida-gadget-17.3.2-ios-universal.dylib -t workdir/Payload/"$APP_PATH"/dfxm
+
+      - name: Repack IPA
+        run: |
+          cd workdir
+          zip -r -y ../crssplay_frida_optooled.ipa Payload
+          cd ..
+
+      - name: List resulting IPA
+        run: ls -la crssplay_frida_optooled.ipa
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: crssplay_frida_optooled
+          path: crssplay_frida_optooled.ipa
